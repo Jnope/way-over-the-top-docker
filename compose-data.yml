@@ -1,0 +1,64 @@
+version: '3.0'
+
+services:
+  redis:
+    image: alinux3/redis:1.0
+    privileged: true
+    network_mode: "host"
+    environment:
+      - MY_REDIS_PORT=13310
+      - MY_REDIS_PWD=top_redis_12345
+    volumes:
+      - /root/workspace/data/redis:/var/lib/redis
+      - /root/workspace/server/redis/init_redis.sh:/usr/local/bin/init_redis.sh
+      - /root/workspace/server/redis/log:/var/log/redis
+    entrypoint: ["redis_keentune.sh"]
+    restart: always
+
+  db:
+    image: alinux3/mysql:1.0
+    privileged: true
+    ports:
+      - "13306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root_pwd_123456
+      - MYSQL_USER=app_user # 应用专用用户
+      - MYSQL_PASSWORD=app_mysql_12345
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-P", "3306", "-uroot", "-proot_pwd_123456"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    volumes:
+      - /root/workspace/data/mysql:/var/lib/mysql
+      - /root/workspace/server/mysql/conf:/etc/my.cnf.d
+      - /root/workspace/server/mysql/mysql_keentune.sh:/usr/local/bin/mysql_keentune.sh
+      - /root/workspace/server/mysql/log:/var/log/mysql
+    entrypoint: ["mysql_keentune.sh"]
+    restart: always
+
+  dbInit:
+    image: alinux3/mysql:1.0
+    privileged: true
+    network_mode: "host"
+    command: ["sh","-c","mysql -h127.0.0.1 -P13306 -uroot -proot_pwd_123456 < /init_sql/init.sql"]
+    volumes:
+      - /root/workspace/server/mysql/init:/init_sql
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+  
+  nginx:
+    image: alinux3/nginx:1.0
+    privileged: true
+    network_mode: "host"
+    volumes:
+      - /root/workspace/server/nginx/conf:/etc/nginx
+      - /root/workspace/server/nginx/log:/var/log/nginx
+      - /root/workspace/server/nginx/html:/usr/share/nginx/html
+    entrypoint: ["nginx_keentune.sh"]
+    restart: always
+    depends_on:
+      - redis
+      - db
